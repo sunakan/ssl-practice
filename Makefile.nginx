@@ -1,0 +1,46 @@
+################################################################################
+# 変数
+################################################################################
+DOCKER_NGINX_TAG      := stable
+DOCKER_NGINX_HOST     := my-nginx
+DOCKER_NETWORK_NAME   := nginx-network
+DOCKER_NETWORK_SUBNET := 192.168.213.0/24
+
+################################################################################
+# タスク
+################################################################################
+docker-network:
+	( docker network ls | grep $(DOCKER_NETWORK_NAME) ) \
+	|| docker network create $(DOCKER_NETWORK_NAME) --subnet $(DOCKER_NETWORK_SUBNET)
+
+up: docker-network ## nginxコンテナを立ち上げる
+	( docker container ls | grep $(DOCKER_NGINX_HOST) ) \
+	|| docker run \
+		--detach \
+		--rm \
+		--interactive \
+		--tty \
+		--publish 80:80 \
+		--hostname $(DOCKER_NGINX_HOST) \
+		--name $(DOCKER_NGINX_HOST) \
+		--network $(DOCKER_NETWORK_NAME) \
+		nginx:$(DOCKER_NGINX_TAG)
+
+health-chek: ## nginxのヘルスチェック
+	docker run \
+	--rm \
+	--tty \
+	--network $(DOCKER_NETWORK_NAME) \
+	curlimages/curl:latest \
+		--location \
+		--head \
+		http://$(DOCKER_NGINX_HOST)/ \
+		--output /dev/null \
+		--write-out '%{http_code}\n' \
+		--silent
+
+down: ## nginxコンテナを片付ける
+	docker container ls --quiet --filter 'name=$(DOCKER_NGINX_HOST)' \
+	| xargs -I {container-id} docker container stop {container-id}
+	docker network ls --quiet --filter 'name=$(DOCKER_NETWORK_NAME)' \
+	| xargs -I {network-id} docker network rm {network-id}
